@@ -2936,9 +2936,12 @@ bool call::process_incoming(char * msg, struct sockaddr_storage *src)
     callDebug("Processing %d byte incoming message for call-ID %s (hash %u):\n%s\n\n", strlen(msg), id, hash(msg), msg);
 
     setRunning();
+    message *curmsg = call_scenario->messages[msg_index];
 
     /* Ignore the messages received during a pause if -pause_msg_ign is set */
-    if(call_scenario->messages[msg_index] -> M_type == MSG_TYPE_PAUSE && pause_msg_ign) return(true);
+    if (curmsg->M_type == MSG_TYPE_PAUSE && pause_msg_ign) {
+        return true;
+    }
 
     /* Get our destination if we have none. */
     if (call_peer.ss_family == AF_UNSPEC && src) {
@@ -2946,8 +2949,8 @@ bool call::process_incoming(char * msg, struct sockaddr_storage *src)
     }
 
     /* Authorize nop as a first command, even in server mode */
-    if((msg_index == 0) && (call_scenario->messages[msg_index] -> M_type == MSG_TYPE_NOP)) {
-        queue_up (msg);
+    if (msg_index == 0 && curmsg->M_type == MSG_TYPE_NOP) {
+        queue_up(msg);
         paused_until = 0;
         return run();
     }
@@ -3008,15 +3011,15 @@ bool call::process_incoming(char * msg, struct sockaddr_storage *src)
     }
 
 #ifdef RTP_STREAM
-  /* Check if message has a SDP in it; and extract media information. */
-  if (!strcmp(get_header_content(msg, (char*)"Content-Type:"),"application/sdp") &&
-          (hasMedia == 1)) {
-    extract_rtp_remote_addr(msg);
-  }
+    /* Check if message has a SDP in it; and extract media information. */
+    if (!strcmp(get_header_content(msg, (char*)"Content-Type:"), "application/sdp") &&
+            hasMedia == 1 && !curmsg->ignoresdp) {
+        extract_rtp_remote_addr(msg);
+    }
 #endif
 
     /* Is it a response ? */
-    if((msg[0] == 'S') &&
+    if ((msg[0] == 'S') &&
             (msg[1] == 'I') &&
             (msg[2] == 'P') &&
             (msg[3] == '/') &&
@@ -3025,12 +3028,12 @@ bool call::process_incoming(char * msg, struct sockaddr_storage *src)
             (msg[6] == '0')    ) {
 
         reply_code = get_reply_code(msg);
-        if(!reply_code) {
+        if (!reply_code) {
             if (!process_unexpected(msg)) {
                 return false; // Call aborted by unexpected message handling
             }
 #ifdef PCAPPLAY
-        } else if ((hasMedia == 1) && *(strstr(msg, "\r\n\r\n")+4) != '\0') {
+        } else if (hasMedia == 1 && !curmsg->ignoresdp && *(strstr(msg, "\r\n\r\n") + 4) != '\0') {
             /* Get media info if we find something like an SDP */
             get_remote_media_addr(msg);
 #endif
@@ -3068,8 +3071,9 @@ bool call::process_incoming(char * msg, struct sockaddr_storage *src)
             if (((strncmp(request, "INVITE", 6) == 0)
                     || (strncmp(request, "ACK", 3) == 0)
                     || (strncmp(request, "PRACK", 5) == 0))
-                    && (hasMedia == 1))
+                    && hasMedia == 1 && !curmsg->ignoresdp) {
                 get_remote_media_addr(msg);
+            }
 #endif
 
             reply_code = 0;
