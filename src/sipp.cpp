@@ -436,9 +436,10 @@ void pollset_process(int wait)
                 recv_count is a flag that stays up as
                 long as there's data to read */
 
+#ifndef HAVE_EPOLL
     /* What index should we try reading from? */
     static int read_index;
-#ifndef HAVE_EPOLL
+
     int loops = max_recv_loops;
 
     // If not using epoll, we have a queue of pending messages to spin through.
@@ -745,8 +746,7 @@ void traffic_thread()
                 if (useScreenf == 1) {
                     print_screens();
                 }
-
-                sipp_exit(EXIT_TEST_RES_UNKNOWN);
+                break;
             }
         }
 
@@ -1193,6 +1193,7 @@ void releaseGlobalAllocations()
     free_default_messages();
     freeInFiles();
     freeUserVarMap();
+    delete userVariables;
     delete globalVariables;
 }
 
@@ -1215,6 +1216,17 @@ void sipp_exit(int rc)
     screen_exit();
     print_last_stats();
     screen_show_errors();
+
+    /* Close open files. */
+    struct logfile_info** logfile_ptr;
+    struct logfile_info* logfiles[] = {
+        &screen_lfi, &calldebug_lfi, &message_lfi, &shortmessage_lfi, &log_lfi, &error_lfi, NULL};
+    for (logfile_ptr = logfiles; *logfile_ptr; ++logfile_ptr) {
+        if ((*logfile_ptr)->fptr) {
+            fclose((*logfile_ptr)->fptr);
+            (*logfile_ptr)->fptr = NULL;
+        }
+    }
 
     // Get failed calls counter value before releasing objects
     if (display_scenario) {
@@ -1290,7 +1302,7 @@ int main(int argc, char *argv[])
 {
     int                  argi = 0;
     struct sockaddr_storage   media_sockaddr;
-    pthread_t            pthread2_id,  pthread3_id;
+    pthread_t            pthread2_id = 0, pthread3_id = 0;
     unsigned int         generic_count = 0;
     bool                 slave_masterSet = false;
 
@@ -1336,9 +1348,6 @@ int main(int argc, char *argv[])
     memset(media_ip,0, 40);
     memset(control_ip,0, 40);
     memset(media_ip_escaped,0, 42);
-
-    /* Load compression pluggin if available */
-    comp_load();
 
     /* Initialize the tolower table. */
     init_tolower_table();
@@ -1889,6 +1898,11 @@ int main(int argc, char *argv[])
         }
     }
 
+    /* Load compression plugin if needed/available. */
+    if (compression) {
+        comp_load();
+    }
+
     if((extendedTwinSippMode && !slave_masterSet) || (!extendedTwinSippMode && slave_masterSet)) {
         ERROR("-slave_cfg option must be used with -slave or -master option\n");
     }
@@ -2260,14 +2274,37 @@ int main(int argc, char *argv[])
 
     traffic_thread();
 
+    /* Cancel and join other threads. */
+    if (pthread2_id) {
+        pthread_cancel(pthread2_id);
+    }
+    if (pthread3_id) {
+        pthread_cancel(pthread3_id);
+    }
+    if (pthread2_id) {
+        pthread_join(pthread2_id, NULL);
+    }
+    if (pthread3_id) {
+        pthread_join(pthread3_id, NULL);
+    }
+
+    if (!nostdin) {
+        sipp_close_socket(stdin_socket);
+    }
+
 #ifdef HAVE_EPOLL
     close(epollfd);
     free(epollevents);
 #endif
+
+    if (local_addr_storage) {
+        freeaddrinfo(local_addr_storage);
+    }
 
     if (scenario_file != NULL) {
         delete [] scenario_file;
         scenario_file = NULL;
     }
 
+    sipp_exit(EXIT_TEST_RES_UNKNOWN);
 }

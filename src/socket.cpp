@@ -335,24 +335,13 @@ const char *sip_tls_error_string(SSL *ssl, int size)
 
 #endif
 
-char * get_inet_address(struct sockaddr_storage * addr)
+static char* get_inet_address(const struct sockaddr_storage* addr, char* dst, int len)
 {
-    static char * ip_addr = NULL;
-
-    if (!ip_addr) {
-        ip_addr = (char *)malloc(1024*sizeof(char));
+    if (getnameinfo(_RCAST(struct sockaddr*, addr), SOCK_ADDR_SIZE(addr),
+                    dst, len, NULL, 0, NI_NUMERICHOST) != 0) {
+        snprintf(dst, len, "addr not supported");
     }
-    if (getnameinfo(_RCAST(struct sockaddr *, addr),
-                    SOCK_ADDR_SIZE(addr),
-                    ip_addr,
-                    1024,
-                    NULL,
-                    0,
-                    NI_NUMERICHOST) != 0) {
-        strcpy(ip_addr, "addr not supported");
-    }
-
-    return ip_addr;
+    return dst;
 }
 
 bool process_key(int c)
@@ -2531,10 +2520,9 @@ int open_connections()
                    local_addr->ai_addr,
                    SOCK_ADDR_SIZE(
                        _RCAST(struct sockaddr_storage *, local_addr->ai_addr)));
-
             freeaddrinfo(local_addr);
 
-            strcpy(remote_ip, get_inet_address(&remote_sockaddr));
+            get_inet_address(&remote_sockaddr, remote_ip, sizeof(remote_ip));
             if (remote_sockaddr.ss_family == AF_INET) {
                 (_RCAST(struct sockaddr_in *, &remote_sockaddr))->sin_port =
                     htons((short)remote_port);
@@ -2580,9 +2568,8 @@ int open_connections()
         local_sockaddr.ss_family = local_addr->ai_addr->sa_family;
 
         if (!strlen(local_ip)) {
-            strcpy(local_ip,
-                   get_inet_address(
-                       _RCAST(struct sockaddr_storage *, local_addr->ai_addr)));
+            get_inet_address(_RCAST(struct sockaddr_storage*, local_addr->ai_addr),
+			     local_ip, sizeof(local_ip));
         } else {
             memcpy(&local_sockaddr,
                    local_addr->ai_addr,
@@ -2880,7 +2867,8 @@ void connect_to_peer(char *peer_host, int peer_port, struct sockaddr_storage *pe
             htons((short)peer_port);
         is_ipv6 = true;
     }
-    strcpy(peer_ip, get_inet_address(peer_sockaddr));
+    get_inet_address(peer_sockaddr, peer_ip, sizeof(peer_ip));
+
     if ((*peer_socket = new_sipp_socket(is_ipv6, T_TCP)) == NULL) {
         ERROR_NO("Unable to get a twin sipp TCP socket");
     }
@@ -2963,6 +2951,7 @@ void connect_local_twin_socket(char * twinSippHost)
            local_addr->ai_addr,
            SOCK_ADDR_SIZE(
                _RCAST(struct sockaddr_storage *, local_addr->ai_addr)));
+    freeaddrinfo(local_addr);
 
     if (twinSipp_sockaddr.ss_family == AF_INET) {
         (_RCAST(struct sockaddr_in *, &twinSipp_sockaddr))->sin_port =
@@ -2972,7 +2961,7 @@ void connect_local_twin_socket(char * twinSippHost)
             htons((short)twinSippPort);
         is_ipv6 = true;
     }
-    strcpy(twinSippIp, get_inet_address(&twinSipp_sockaddr));
+    get_inet_address(&twinSipp_sockaddr, twinSippIp, sizeof(twinSippIp));
 
     if ((localTwinSippSocket = new_sipp_socket(is_ipv6, T_TCP)) == NULL) {
         ERROR_NO("Unable to get a listener TCP socket ");

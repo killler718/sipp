@@ -904,7 +904,7 @@ bool call::connect_socket_if_needed()
         }
 
         if (peripsocket) {
-            struct addrinfo * h ;
+            struct addrinfo* h;
             struct addrinfo   hints;
             memset((char*)&hints, 0, sizeof(hints));
             hints.ai_flags  = AI_PASSIVE;
@@ -923,6 +923,7 @@ bool call::connect_socket_if_needed()
             } else {
                 (_RCAST(struct sockaddr_in *, &saddr))->sin_port = htons(local_port);
             }
+            freeaddrinfo(h);
         }
 
         if (sipp_bind_socket(call_socket, &saddr, &call_port)) {
@@ -3655,6 +3656,8 @@ call::T_ActionResult call::executeAction(char * msg, message *curmsg)
                 ERROR("Can not switch between IPv4 and IPV6 using setdest!");
             }
             memcpy(&call_peer, local_addr->ai_addr, SOCK_ADDR_SIZE(_RCAST(struct sockaddr_storage *,local_addr->ai_addr)));
+            freeaddrinfo(local_addr);
+
             if (call_peer.ss_family == AF_INET) {
                 (_RCAST(struct sockaddr_in *,&call_peer))->sin_port = htons(port);
             } else {

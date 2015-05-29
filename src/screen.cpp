@@ -35,7 +35,7 @@
 #include <sys/resource.h>
 
 #ifdef __SUNOS
-#include<stdarg.h>
+#include <stdarg.h>
 #endif
 
 #include <unistd.h>
@@ -67,8 +67,11 @@ int screen_readkey()
 
 void screen_exit()
 {
-    if( backgroundMode == false )
-        endwin();
+    if (!screen_inited) {
+        return;
+    }
+
+    endwin();
 }
 
 void screen_show_errors() {
