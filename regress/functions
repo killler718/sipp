@@ -63,7 +63,11 @@ ok() {
 }
 
 fail() {
-    echo "failed"
+    if test $# -eq 0; then
+        echo "failed"
+    else
+        echo "failed:" "$@"
+    fi
     cleanup
     exit 1
 }
